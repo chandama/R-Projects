@@ -8,7 +8,79 @@ wide <- read_csv('https://www.dropbox.com/s/il32xg5lrgza06m/mh_wide.csv?dl=1')
 
 # Your Code: --------------------------------------------------------------------------------------------
 
+#Most duplicate names have the same zip so you can probably remove NAs based on name + zip match
+# At least one row has Florida as the state instead of FL. Search for more (1 with Washington but no dupe. Figure out what to do with it)
 
+
+#Remove duplicate NA columns based on the ID grouping and keeping the non-NA version based on Longitude
+# The NA duplicates didn't have a longitude while the outlier Florida and Washington did.
+wide_clean <- wide %>% 
+  group_by(id) %>% 
+  slice(which.max(!is.na(longitude))) %>% 
+  mutate(addressRegion = ifelse(addressRegion == 'Florida','FL',ifelse(addressRegion == 'Washington','WA',addressRegion)),
+         addressLocality = ifelse(is.na(addressLocality) & addressRegion == 'FL', 'Madison', ifelse(is.na(addressLocality) & addressRegion == 'WA', 'Allyn',addressLocality)),
+         postalCode = ifelse(is.na(postalCode) & addressRegion == 'FL', '32340', ifelse(is.na(postalCode) & addressRegion == 'WA', '98524', postalCode))) %>% 
+  janitor::clean_names()
+  
+# Check all columns for NA values (shouldn't be any in wide_clean)
+colSums(is.na(wide_clean))
+
+
+#NEED TO DO:
+#3. Deal with duplicate price values in the long data (average if both are numbers, pick 1 if the 2nd value is "call for price")
+
+long_clean_pivoted <- long %>% 
+  mutate(value = ifelse(key %in% c('Laundromat','Pool','Club House', 'Handicap Accessible', 'Storage'),1,value)) %>% 
+  #mutate(value = ) #Fix duplicate price values before the pivot wider
+  group_by(id) %>%
+  distinct(key, .keep_all = TRUE) %>% ungroup() %>% 
+  pivot_wider(
+    names_from = key,
+    values_from = value
+  ) %>%
+  #mutate(across(c('Laundromat','Pool','Club House', 'Handicap Accessible', 'Storage'), ~ ifelse(is.na(.x),1,NA))) %>% 
+  janitor::clean_names() %>%
+  rename('has_laundromat'='laundromat',
+         'has_pool'='pool' ,
+         'has_club_house'='club_house',
+         'has_handicap_accessible'='handicap_accessible',
+         'has_storage'= 'storage',
+         'total_occupancy_rate'='total_occupancy',
+         'size_acres'='size',
+         'price_usd'='price',
+         'average_rent_for_park_owned_homes_usd' = 'average_rent_for_park_owned_homes',
+         'average_mh_lot_rent_usd' = 'average_mh_lot_rent',
+         'average_rv_lot_rent_usd' = 'average_rv_lot_rent') %>% 
+  mutate() %>% #Pull out dates with 8 digits
+  transform(number_of_mh_lots = as.numeric(number_of_mh_lots),
+            singlewide_lots = as.numeric(singlewide_lots),
+            number_of_park_owned_homes = as.numeric(number_of_park_owned_homes),
+            doublewide_lots = as.numeric(doublewide_lots),
+            number_of_rv_lots = as.numeric(number_of_rv_lots),
+            posted_on = mdy(posted_on),
+            updated_on = mdy(updated_on),
+            year_built = as.numeric(year_built)) %>% 
+  mutate(year_built = ifelse(str_detect(year_built,'\\d{5}'),substr(year_built,start = 1, stop = 4), year_built),
+         price_usd = parse_number(price_usd),
+         average_rent_for_park_owned_homes_usd = parse_number(average_rent_for_park_owned_homes_usd),
+         average_mh_lot_rent_usd = parse_number(average_mh_lot_rent_usd),
+         average_rv_lot_rent_usd = parse_number(average_rv_lot_rent_usd),
+         interest_rate = parse_number(interest_rate) / 100,
+         total_occupancy_rate = parse_number(total_occupancy_rate) / 100,
+         cash = if_else(str_detect(purchase_method,'Cash'), 1, 0),
+         new_loan = if_else(str_detect(purchase_method,'New Loan'), 1, 0),
+         seller_financing = if_else(str_detect(purchase_method,'Seller Financing'), 1, 0), 
+         assumable_loan = if_else(str_detect(purchase_method,'Assumable Loan'), 1, 0))
+
+
+
+
+
+
+
+
+
+  
 
 
 # Naming Checks -----------------------------------------------------------------------------------------
