@@ -29,17 +29,33 @@ colSums(is.na(wide_clean))
 #NEED TO DO:
 #3. Deal with duplicate price values in the long data (average if both are numbers, pick 1 if the 2nd value is "call for price")
 
-long_clean_pivoted <- long %>% 
+# Remove non-numeric Price values
+remove_calls <- long %>% 
+  filter(value != 'Call for Price' | is.na(value))
+
+# With 'Call for Price' removed, average the remaining duplicate values
+average_price <- remove_calls %>% 
+  filter(key == 'Price') %>% 
+  mutate(value = parse_number(value)) %>% 
+  group_by(id) %>% 
+  summarise(key = 'Price', value= mean(value)) %>%
+  mutate(value = as.character(value))
+
+# re-bind the averaged rows resulting in clean Price data
+remove_duplicates <- remove_calls %>% 
+  filter(key != 'Price') %>% 
+  bind_rows(average_price)
+
+# Pivot longer and do all of the remaining cleanings
+long_clean_pivoted <- remove_duplicates %>% 
   mutate(value = ifelse(key %in% c('Laundromat','Pool','Club House', 'Handicap Accessible', 'Storage'),1,value)) %>% 
-  #mutate(value = ) #Fix duplicate price values before the pivot wider
   group_by(id) %>%
   distinct(key, .keep_all = TRUE) %>% ungroup() %>% 
   pivot_wider(
     names_from = key,
     values_from = value
   ) %>%
-  #mutate(across(c('Laundromat','Pool','Club House', 'Handicap Accessible', 'Storage'), ~ ifelse(is.na(.x),1,NA))) %>% 
-  janitor::clean_names() %>%
+  janitor::clean_names() %>% 
   rename('has_laundromat'='laundromat',
          'has_pool'='pool' ,
          'has_club_house'='club_house',
@@ -51,16 +67,14 @@ long_clean_pivoted <- long %>%
          'average_rent_for_park_owned_homes_usd' = 'average_rent_for_park_owned_homes',
          'average_mh_lot_rent_usd' = 'average_mh_lot_rent',
          'average_rv_lot_rent_usd' = 'average_rv_lot_rent') %>% 
-  mutate() %>% #Pull out dates with 8 digits
   transform(number_of_mh_lots = as.numeric(number_of_mh_lots),
             singlewide_lots = as.numeric(singlewide_lots),
             number_of_park_owned_homes = as.numeric(number_of_park_owned_homes),
             doublewide_lots = as.numeric(doublewide_lots),
             number_of_rv_lots = as.numeric(number_of_rv_lots),
-            posted_on = mdy(posted_on),
-            updated_on = mdy(updated_on),
-            year_built = as.numeric(year_built)) %>% 
-  mutate(year_built = ifelse(str_detect(year_built,'\\d{5}'),substr(year_built,start = 1, stop = 4), year_built),
+            posted_on = parse_date_time(posted_on, c('m d y')),
+            updated_on = parse_date_time(updated_on, c('m d y'))) %>% 
+  mutate(year_built = ifelse(str_detect(year_built,'\\d{5}'),parse_integer(substr(year_built,start = 1, stop = 4)), parse_integer(year_built)),
          price_usd = parse_number(price_usd),
          average_rent_for_park_owned_homes_usd = parse_number(average_rent_for_park_owned_homes_usd),
          average_mh_lot_rent_usd = parse_number(average_mh_lot_rent_usd),
@@ -70,18 +84,74 @@ long_clean_pivoted <- long %>%
          cash = if_else(str_detect(purchase_method,'Cash'), 1, 0),
          new_loan = if_else(str_detect(purchase_method,'New Loan'), 1, 0),
          seller_financing = if_else(str_detect(purchase_method,'Seller Financing'), 1, 0), 
-         assumable_loan = if_else(str_detect(purchase_method,'Assumable Loan'), 1, 0))
+         assumable_loan = if_else(str_detect(purchase_method,'Assumable Loan'), 1, 0),
+         size_acres = if_else(str_detect(size_acres, 'hectare'), parse_number(size_acres) * 2.47105381, parse_number(size_acres)))
 
 
 
+# Join time!!!
+# Join by ID, then add the age_years, price_per_lot_usd, and price_usd columns/fixes and final cleaning
+together_clean <- long_clean_pivoted %>% 
+  left_join(wide_clean, by = c('id' = 'id')) %>% 
+  mutate(year_built = ifelse(year_built < 1000, NA, year_built),
+         age_years = parse_integer(format(Sys.Date(), "%Y")) - year_built,
+         price_per_lot_usd = price_usd / number_of_mh_lots,
+         price_usd = ifelse(price_usd < 5, NA, price_usd))
 
 
+# Visualizations
 
+plot_1 <- together_clean %>% 
+  ggplot(mapping = aes(x = price_usd)) +
+  geom_density(alpha = 0.6, fill = 'blue') +
+  theme_bw() +
+  labs(title = "Density Distribution of Price (USD)",
+       x = "Price USD",
+       y = "Density")
 
+plot_1
 
+plot_2 <- together_clean %>% 
+  ggplot(mapping = aes(x = log(price_usd))) +
+  geom_density(alpha = 0.6, fill = 'blue') +
+  theme_bw() +
+  labs(title = "Density Distribution of Price (USD), Log Scale",
+       x = "Price in USD, Log Scale",
+       y = "Density") 
 
+plot_2
+
+plot_3 <- together_clean %>% filter(posted_on > "2022-01-01") %>% 
+  ggplot(mapping = aes(x = posted_on)) +
+  geom_histogram(alpha = 0.6, fill = 'red', bins = 30) +
+  theme_bw() +
+  labs(title = "Property Listings over Time",
+       x = "Date Posted (30 bins)",
+       y = "Count of Properties")  
+
+plot_3
+
+plot_4 <- together_clean %>% 
+  ggplot(mapping = aes(x = age_years)) +
+  geom_histogram(alpha = 0.6, fill = 'green', bins = 30) +
+  theme_bw() +
+  labs(title = "Property Age in Years",
+       x = "Age (30 bins)",
+       y = "Count of Properties")  
+
+plot_4
+
+plot_5 <- together_clean %>% 
+  mutate(has_purchase_method = if_else(is.na(purchase_method), 'No','Yes')) %>% 
+  ggplot(mapping = aes(x = address_region, fill = purchase_method)) +
+  geom_bar() +
+  facet_wrap(~has_purchase_method, ncol = 1, labeller = label_both) +
+  theme_bw() +
+  labs(title = "Property Listings by State and Purchase Method",
+       x = "US State",
+       y = "Count") 
   
-
+plot_5
 
 # Naming Checks -----------------------------------------------------------------------------------------
 
