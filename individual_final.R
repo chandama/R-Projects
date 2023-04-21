@@ -151,7 +151,7 @@ expected_object_names <- c(
 # Tests
 expected_object_names_result <- sum(ls() %in% expected_object_names) == length(expected_object_names)
 
-expected_cols <- read_csv('~/Desktop/BYU/2023/IS555/is-555-09-individual-final-chandama/expected_cols.csv', show_col_types=F) 
+expected_cols <- read_csv('expected_cols.csv', show_col_types=F) 
 
 if(!expected_object_names_result){
   error_content <- paste(expected_object_names[!expected_object_names %in% ls()], collapse = ',')
