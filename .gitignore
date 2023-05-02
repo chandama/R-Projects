@@ -1,4 +1,8 @@
 .DS_Store
+<<<<<<< HEAD
+=======
+*.csv
+>>>>>>> r2remote/main
 .Rproj.user
 .Rhistory
 .RData
