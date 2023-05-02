@@ -1,0 +1,15 @@
+tibble,colname
+industry_salary,company_industry
+industry_salary,median_salary
+industry_salary,mean_salary
+skill_counts,skill
+skill_counts,count
+top_10_job_locations,location
+top_10_job_locations,n
+top_hiring_companies,company
+top_hiring_companies,n
+top_job_titles,job_simpl
+top_job_titles,n
+top_locations_salary,location
+top_locations_salary,median_salary
+top_locations_salary,mean_salary
